@@ -79,11 +79,15 @@ export function useTypewriter() {
       drainTimerRef.current = null;
     }
     drainingRef.current = false;
-    // Empty the buffer into display
+    // First: flush any remaining buffered characters into displayText
     if (bufferRef.current.length > 0) {
       displayTextRef.current += bufferRef.current.join("");
       bufferRef.current = [];
     }
+    // Immediately clear displayText so the overlay disappears
+    // before the setStreaming(false) re-render fires.
+    // The final full text is already safe in the message store.
+    displayTextRef.current = "";
   }, []);
 
   return { queueText, flushQueue, displayText: displayTextRef };

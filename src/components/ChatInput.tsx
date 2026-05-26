@@ -16,9 +16,14 @@ const ChatInput = memo(function ChatInput({ disabled, onSubmit }: ChatInputProps
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Keep focus stable even when parent re-renders
+  // Use requestAnimationFrame so focus fires after the DOM is fully settled
+  // (after any scroll or layout changes from streaming state updates).
   useEffect(() => {
     if (!disabled && inputRef.current) {
-      inputRef.current.focus();
+      const raf = requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
+      return () => cancelAnimationFrame(raf);
     }
   }, [disabled]);
 
