@@ -2,8 +2,12 @@
 
 /* ─── DuckGallery ──────────────────────────────────────────────
  * Displays all 36 ducks from the 6×6 sprite sheet in a grid.
- * Uses mix-blend-mode: multiply so the white PNG background
- * becomes transparent against the dark sidebar.
+ *
+ * How it works (2-layer approach for mix-blend-mode):
+ *   1. White bg box  — the "canvas" multiply composites against
+ *   2. DuckIcon div — PNG white bg × white box = white (transparent effect)
+ *                      actual duck yellow × white = stays bright
+ *                      PNG transparent × white = dark sidebar bg shows through
  *
  * Usage:
  *   <DuckGallery selected={selected} onSelect={setSelected} />
@@ -36,8 +40,7 @@ export default function DuckGallery({ selected, onSelect }: DuckGalleryProps) {
       <div className="grid grid-cols-6 gap-1">
         {DUCK_NAMES.map((row, r) =>
           row.map((_, c) => {
-            const isSelected =
-              selected?.row === r && selected?.col === c;
+            const isSelected = selected?.row === r && selected?.col === c;
             return (
               <button
                 key={`${r}-${c}`}
@@ -45,27 +48,37 @@ export default function DuckGallery({ selected, onSelect }: DuckGalleryProps) {
                 title={DUCK_NAMES[r][c]}
                 className={`
                   relative flex items-center justify-center rounded-lg
-                  transition-all duration-150 cursor-pointer
+                  transition-all duration-150 cursor-pointer overflow-hidden
                   ${isSelected
-                    ? "bg-blue-600/30 ring-1 ring-blue-500/50 scale-110 z-10"
-                    : "bg-white/[0.04] hover:bg-white/[0.08] hover:scale-105"
+                    ? "bg-blue-600/30 ring-1 ring-blue-500/60 scale-110 z-10"
+                    : "bg-white/5 hover:bg-white/10 hover:scale-105"
                   }
                 `}
-                style={{
-                  aspectRatio: "1",
-                  // mix-blend-mode: multiply → white PNG bg becomes dark
-                  backgroundColor: isSelected ? undefined : "#0f172a",
-                  mixBlendMode: "multiply",
-                }}
+                style={{ aspectRatio: "1" }}
               >
-                <DuckIcon
-                  row={r}
-                  col={c}
-                  size={28}
-                  className={`
-                    ${isSelected ? "opacity-100" : "opacity-90"}
-                  `}
-                />
+                {/*
+                  Layer 1: Pure white bg — this is what "multiply" composites against.
+                  White × White = White (duck white/bright areas stay white)
+                  Transparent × White = dark sidebar bg shows through
+                */}
+                <div className="absolute inset-0 rounded-lg bg-white" />
+
+                {/*
+                  Layer 2: Duck with mix-blend-mode: multiply
+                  The PNG's white areas blend with the white div below = white
+                  The PNG's actual yellow duck colors × white = stays bright yellow
+                */}
+                <div
+                  className="absolute inset-0 flex items-center justify-center"
+                  style={{ mixBlendMode: "multiply" }}
+                >
+                  <DuckIcon
+                    row={r}
+                    col={c}
+                    size={36}
+                    className={isSelected ? "opacity-100" : "opacity-95"}
+                  />
+                </div>
               </button>
             );
           })
@@ -73,7 +86,7 @@ export default function DuckGallery({ selected, onSelect }: DuckGalleryProps) {
       </div>
 
       {selected && (
-        <p className="text-xs text-blue-400 mt-2 text-center">
+        <p className="text-xs text-blue-400 mt-2 text-center font-display">
           {DUCK_NAMES[selected.row][selected.col]} selected
         </p>
       )}
