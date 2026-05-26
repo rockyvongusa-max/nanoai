@@ -30,7 +30,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
       <div className="p-4 border-b border-white/5">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <DuckIcon row={0} col={0} size={24} className="opacity-90" />
+            <DuckIcon row={0} col={0} size={24} className="opacity-90 drop-shadow-[0_0_6px_rgba(253,224,71,0.25)]" />
             <h2 className="text-sm font-display font-semibold text-white tracking-tight">NanoAI</h2>
           </div>
           {onClose && (
