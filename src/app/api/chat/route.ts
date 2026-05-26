@@ -174,11 +174,23 @@ export async function POST(req: NextRequest) {
           const reader = miniMaxResponse.body!.getReader();
           while (!finished) {
             const { value, done } = await reader.read();
-            if (done) break;
+            if (done) {
+              // Reader closed — emit done even if message_end never arrived
+              // (MiniMax sometimes disconnects before sending message_end)
+              try {
+                controller.enqueue(
+                  encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`)
+                );
+                controller.close();
+              } catch {
+                // already closed via message_end
+              }
+              break;
+            }
             const chunk = decoder.decode(value, { stream: true });
             parser.feed(chunk);
           }
-          parser.feed(""); // signal end
+          parser.feed(""); // signal end to parser
         } catch (err) {
           console.error("Stream error:", err);
           controller.error(err);
