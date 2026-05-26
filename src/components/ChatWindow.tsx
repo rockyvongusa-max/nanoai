@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, useEffect, useCallback } from "react";
+import React, { useRef, useState, useEffect, useCallback, memo } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -59,7 +59,6 @@ const CopyButton = memo(function CopyButton({ code }: { code: string }) {
     </button>
   );
 });
-import { memo } from "react";
 
 /* ─── CodeBlock ─────────────────────────────────────────────── */
 function CodeBlock({ code, lang }: { code: string; lang: string }) {
@@ -106,10 +105,10 @@ function MarkdownRenderer({ content }: { content: string }) {
           <h3 className="text-sm font-medium text-slate-300 mt-3 mb-1">{children}</h3>
         ),
         p: ({ children }) => (
-          <p className="text-sm leading-relaxed mb-2 last:mb-0 animate-fade-in">{children}</p>
+          <p className="text-sm leading-relaxed mb-2 last:mb-0">{children}</p>
         ),
         li: ({ children }) => (
-          <li className="text-sm leading-relaxed mb-1 ml-4 list-disc animate-fade-in">{children}</li>
+          <li className="text-sm leading-relaxed mb-1 ml-4 list-disc">{children}</li>
         ),
         strong: ({ children }) => (
           <strong className="font-semibold text-white">{children}</strong>
@@ -256,18 +255,17 @@ export default function ChatWindow({ onPresetSelect }: ChatWindowProps) {
     clearMessages,
   } = useChatStore();
 
-  // Typewriter: buffers incoming tokens and renders them gradually
-  const { queueText, flushQueue, displayText } = useTypewriter();
+  // Typewriter drives updateLastMessage directly — no overlay, no extra state
+  const { queueText, flushQueue } = useTypewriter(updateLastMessage);
 
-  const [isGenerating, setIsGenerating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to bottom whenever displayed text grows
+  // Scroll to bottom whenever messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [displayText.current]);
+  }, [messages]);
 
-  /* ── submit handler (passed to isolated ChatInput) ─────────── */
+  /* ── submit handler ─────────────────────────────────────────── */
   const handleSubmit = useCallback(
     async (inputValue: string, deepResearch: boolean) => {
       if (isStreaming) return;
@@ -280,7 +278,6 @@ export default function ChatWindow({ onPresetSelect }: ChatWindowProps) {
 
       addMessage(userMessage);
       setStreaming(true);
-      setIsGenerating(false);
 
       const assistantPlaceholder: Message = {
         id: crypto.randomUUID(),
@@ -306,8 +303,6 @@ export default function ChatWindow({ onPresetSelect }: ChatWindowProps) {
         const decoder = new TextDecoder();
         let finished = false;
         let thinkingAccumulated = "";
-        let textBuffer = "";
-        let firstTextReceived = false;
 
         while (!finished) {
           const { value, done } = await reader.read();
@@ -322,28 +317,13 @@ export default function ChatWindow({ onPresetSelect }: ChatWindowProps) {
               try {
                 const data = JSON.parse(line.slice(6));
 
-                // Canonical SDK delta names — must match what /api/chat emits
                 if (data.type === "reasoning-delta") {
                   thinkingAccumulated += data.text;
-                  // Thinking updates directly — no throttling needed
-                  updateLastMessage([
-                    { type: "thinking" as const, content: thinkingAccumulated },
-                    ...(textBuffer ? [{ type: "text" as const, content: textBuffer }] : []),
-                  ]);
+                  // Update store with current thinking — no throttling for reasoning
+                  updateLastMessage([{ type: "thinking", content: thinkingAccumulated }]);
                 } else if (data.type === "text-delta") {
-                  if (!firstTextReceived) {
-                    firstTextReceived = true;
-                    setIsGenerating(true);
-                  }
-                  // Feed to typewriter queue for smooth character-by-character rendering
-                  queueText(data.text);
-                  // ALSO sync to message store on every delta so the text persists
-                  // after flushQueue() empties displayText and isGenerating goes false
-                  textBuffer += data.text;
-                  updateLastMessage([
-                    { type: "thinking" as const, content: thinkingAccumulated },
-                    { type: "text" as const, content: textBuffer },
-                  ]);
+                  // Feed to typewriter: drives updateLastMessage every 30ms
+                  queueText(data.text, thinkingAccumulated);
                 } else if (data.type === "done") {
                   finished = true;
                 }
@@ -359,37 +339,12 @@ export default function ChatWindow({ onPresetSelect }: ChatWindowProps) {
           { type: "text", content: "Sorry, there was an error. Please check your API key and try again." },
         ]);
       } finally {
-        flushQueue(); // immediately drain any remaining buffered characters
-        setStreaming(false);
-        setIsGenerating(false);
+        flushQueue();   // drains any remaining buffer into store
+        setStreaming(false); // enables input, hides cursor
       }
     },
     [isStreaming, messages, presetType, addMessage, setStreaming, updateLastMessage, queueText, flushQueue]
   );
-
-  /* ── render the gradually-typed text in the last message ─── */
-  const renderedMessages = messages.map((msg, idx) => {
-    if (msg.role === "assistant" && idx === messages.length - 1 && isGenerating) {
-      // On the active streaming message, splice in the typewriter display
-      const textBlock = msg.blocks.find((b) => b.type === "text");
-      const currentText = textBlock?.content ?? "";
-      // Only inject typewriter text if it differs from what's stored (still streaming)
-      if (displayText.current && displayText.current !== currentText) {
-        const blocks = msg.blocks.map((b) =>
-          b.type === "text" ? { ...b, content: displayText.current } : b
-        );
-        return { ...msg, blocks };
-      }
-    }
-    return msg;
-  });
-
-  const showCursor = (idx: number) => {
-    const msg = messages[idx];
-    if (!isGenerating || msg.role !== "assistant") return false;
-    const last = msg.blocks[msg.blocks.length - 1];
-    return idx === messages.length - 1 && last?.type === "text";
-  };
 
   return (
     <div className="flex flex-col h-full">
@@ -417,7 +372,7 @@ export default function ChatWindow({ onPresetSelect }: ChatWindowProps) {
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto px-4 space-y-4">
         <AnimatePresence>
-          {renderedMessages.map((message, idx) => (
+          {messages.map((message, idx) => (
             <motion.div
               key={message.id ?? `msg-${idx}`}
               initial={{ opacity: 0, y: 10 }}
@@ -441,7 +396,7 @@ export default function ChatWindow({ onPresetSelect }: ChatWindowProps) {
                   message={message}
                   isThinkingExpanded={isThinkingExpanded}
                   toggleThinking={toggleThinking}
-                  showCursor={showCursor(idx)}
+                  showCursor={isStreaming && idx === messages.length - 1}
                 />
               )}
             </motion.div>
@@ -450,7 +405,7 @@ export default function ChatWindow({ onPresetSelect }: ChatWindowProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area — isolated component, does NOT re-render chat history */}
+      {/* Input Area — isolated component */}
       <div className="p-4">
         <ChatInput disabled={isStreaming} onSubmit={handleSubmit} />
       </div>

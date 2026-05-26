@@ -1,38 +1,38 @@
 import { useRef, useCallback } from "react";
 
 /* ─── useTypewriter ─────────────────────────────────────────────
- * Buffers incoming stream tokens and drains them at a controlled pace
- * so text appears character-by-character at ~25–35ms intervals.
+ * Drives a 30ms-per-character typewriter loop that syncs text
+ * directly into the message store via updateLastMessage.
  *
  * Usage:
- *   const { queueText, flushQueue, displayText } = useTypewriter();
+ *   const { queueText, flushQueue } = useTypewriter(updateLastMessage);
  *
- *   // When a new token arrives from the SSE stream:
- *   queueText(token);
- *
- *   // When stream completes:
- *   flushQueue();  // drains remaining buffer immediately
- *
- *   displayText  — the gradually-growing string to render
+ *   queueText(token)  — buffers token, writes to store every 30ms
+ *   flushQueue()     — drains remaining buffer into store immediately
  * ─────────────────────────────────────────────────────────────── */
 
-const TICK_MS = 30;       // ms between each character render
-const FLUSH_THRESHOLD = 80; // if buffer exceeds this many chars, skip ahead
+const TICK_MS = 30;           // ms between each character render
+const FLUSH_THRESHOLD = 100;  // if buffer exceeds this many chars, flush all at once
 
-export function useTypewriter() {
-  // The string built so far — this is what the UI renders
-  const displayTextRef = useRef("");
+type UpdateFn = (blocks: { type: "thinking" | "text"; content: string }[]) => void;
 
-  // Internal buffer: queue of character chunks still waiting to render
+export function useTypewriter(updateLastMessage: UpdateFn) {
+  // Queue of character chunks waiting to be rendered
   const bufferRef = useRef<string[]>([]);
 
-  // raf ID for the draining interval
-  const drainTimerRef = useRef<number | null>(null);
+  // Current accumulated text being built character by character
+  const textRef = useRef("");
 
-  // Currently draining?
+  // Accumulated thinking text (written to store on every reasoning-delta)
+  const thinkingRef = useRef("");
+
+  // Interval timer ID
+  const timerRef = useRef<number | null>(null);
+
+  // Whether the drain loop is currently running
   const drainingRef = useRef(false);
 
-  /* Drain the buffer at TICK_MS per character */
+  /* Drain the buffer at TICK_MS per character, writing to the store */
   const startDrain = useCallback(() => {
     if (drainingRef.current) return;
     drainingRef.current = true;
@@ -40,55 +40,68 @@ export function useTypewriter() {
     const tick = () => {
       if (bufferRef.current.length === 0) {
         drainingRef.current = false;
-        drainTimerRef.current = null;
+        timerRef.current = null;
         return;
       }
 
-      // Flush all at once if buffer is huge — keeps typing responsive
+      // If buffer is huge, flush all at once to stay responsive
       if (bufferRef.current.length > FLUSH_THRESHOLD) {
         const all = bufferRef.current.join("");
         bufferRef.current = [];
-        displayTextRef.current += all;
+        textRef.current += all;
       } else {
         const next = bufferRef.current.shift();
         if (next !== undefined) {
-          displayTextRef.current += next;
+          textRef.current += next;
         }
       }
 
-      drainTimerRef.current = window.setTimeout(tick, TICK_MS);
+      // Write the current accumulated text to the message store
+      updateLastMessage([
+        { type: "thinking", content: thinkingRef.current },
+        { type: "text", content: textRef.current },
+      ]);
+
+      timerRef.current = window.setTimeout(tick, TICK_MS);
     };
 
-    drainTimerRef.current = window.setTimeout(tick, TICK_MS);
-  }, []);
+    timerRef.current = window.setTimeout(tick, TICK_MS);
+  }, [updateLastMessage]);
 
-  /* Add a text chunk to the buffer and start draining */
+  /* Add a text chunk to the buffer and start the drain loop */
   const queueText = useCallback(
-    (chunk: string) => {
+    (chunk: string, thinking: string) => {
       if (chunk.length === 0) return;
+      thinkingRef.current = thinking; // keep thinking in sync
       bufferRef.current.push(chunk);
       startDrain();
     },
     [startDrain]
   );
 
-  /* Drain the entire remaining buffer immediately */
+  /* Flush the entire remaining buffer immediately into the store */
   const flushQueue = useCallback(() => {
-    if (drainTimerRef.current !== null) {
-      clearTimeout(drainTimerRef.current);
-      drainTimerRef.current = null;
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
     }
     drainingRef.current = false;
-    // First: flush any remaining buffered characters into displayText
+
+    // Dump remaining buffer into textRef
     if (bufferRef.current.length > 0) {
-      displayTextRef.current += bufferRef.current.join("");
+      textRef.current += bufferRef.current.join("");
       bufferRef.current = [];
     }
-    // Immediately clear displayText so the overlay disappears
-    // before the setStreaming(false) re-render fires.
-    // The final full text is already safe in the message store.
-    displayTextRef.current = "";
-  }, []);
 
-  return { queueText, flushQueue, displayText: displayTextRef };
+    // Write final text to the store — this is the authoritative final state
+    updateLastMessage([
+      { type: "thinking", content: thinkingRef.current },
+      { type: "text", content: textRef.current },
+    ]);
+
+    // Reset for next stream
+    textRef.current = "";
+  }, [updateLastMessage]);
+
+  return { queueText, flushQueue };
 }
