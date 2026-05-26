@@ -5,6 +5,7 @@ import { useChatStore } from "@/lib/store";
 import { Plus, Search, Trash2, MessageSquare, FolderOpen, ChevronDown, ChevronRight } from "lucide-react";
 import type { PresetType } from "@/lib/types";
 import DuckIcon from "./DuckIcon";
+import DuckGallery from "./DuckGallery";
 
 interface SidebarProps {
   onClose?: () => void;
@@ -23,6 +24,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
   const { chats, spaces, clearMessages } = useChatStore();
   const [searchQuery, setSearchQuery] = useState("");
   const [spacesExpanded, setSpacesExpanded] = useState(true);
+  const [selectedDuck, setSelectedDuck] = useState({ row: 0, col: 0 });
 
   return (
     <div className="h-full flex flex-col bg-slate-950/50 border-r border-white/5">
@@ -30,7 +32,12 @@ export default function Sidebar({ onClose }: SidebarProps) {
       <div className="p-4 border-b border-white/5">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <DuckIcon row={0} col={0} size={24} className="opacity-90 drop-shadow-[0_0_6px_rgba(253,224,71,0.25)]" />
+            <DuckIcon
+              row={selectedDuck.row}
+              col={selectedDuck.col}
+              size={24}
+              className="opacity-90 drop-shadow-[0_0_6px_rgba(253,224,71,0.25)]"
+            />
             <h2 className="text-sm font-display font-semibold text-white tracking-tight">NanoAI</h2>
           </div>
           {onClose && (
@@ -102,6 +109,9 @@ export default function Sidebar({ onClose }: SidebarProps) {
           </div>
         )}
       </div>
+
+      {/* Duck Gallery */}
+      <DuckGallery selected={selectedDuck} onSelect={setSelectedDuck} />
 
       {/* Chats List */}
       <div className="flex-1 overflow-y-auto px-4 py-3">
