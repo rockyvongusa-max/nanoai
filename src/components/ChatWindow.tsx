@@ -335,9 +335,15 @@ export default function ChatWindow({ onPresetSelect }: ChatWindowProps) {
                     firstTextReceived = true;
                     setIsGenerating(true);
                   }
-                  // Buffer text into typewriter queue — renders gradually
+                  // Feed to typewriter queue for smooth character-by-character rendering
                   queueText(data.text);
+                  // ALSO sync to message store on every delta so the text persists
+                  // after flushQueue() empties displayText and isGenerating goes false
                   textBuffer += data.text;
+                  updateLastMessage([
+                    { type: "thinking" as const, content: thinkingAccumulated },
+                    { type: "text" as const, content: textBuffer },
+                  ]);
                 } else if (data.type === "done") {
                   finished = true;
                 }
