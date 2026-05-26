@@ -358,7 +358,7 @@ export default function ChatWindow({ onPresetSelect }: ChatWindowProps) {
               onPresetSelect?.(preset);
               clearMessages();
             }}
-            className={`px-4 py-2 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
+            className={`px-4 py-2 rounded-xl text-xs font-display font-semibold transition-all whitespace-nowrap ${
               presetType === preset
                 ? "bg-blue-600/40 text-white border border-blue-500/30"
                 : "bg-white/[0.03] border border-white/[0.05] text-slate-400 hover:text-white hover:bg-white/[0.06]"

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useChatStore } from "@/lib/store";
 import { Plus, Search, Trash2, MessageSquare, FolderOpen, ChevronDown, ChevronRight } from "lucide-react";
 import type { PresetType } from "@/lib/types";
+import DuckIcon from "./DuckIcon";
 
 interface SidebarProps {
   onClose?: () => void;
@@ -28,7 +29,10 @@ export default function Sidebar({ onClose }: SidebarProps) {
       {/* Header */}
       <div className="p-4 border-b border-white/5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-white">NanoAI</h2>
+          <div className="flex items-center gap-2">
+            <DuckIcon row={0} col={0} size={24} className="opacity-90" />
+            <h2 className="text-sm font-display font-semibold text-white tracking-tight">NanoAI</h2>
+          </div>
           {onClose && (
             <button
               onClick={onClose}
@@ -65,7 +69,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
       <div className="px-4 py-3 border-b border-white/5">
         <button
           onClick={() => setSpacesExpanded(!spacesExpanded)}
-          className="flex items-center gap-2 text-xs font-medium text-slate-400 hover:text-white transition-colors w-full"
+          className="flex items-center gap-2 text-xs font-display font-medium text-slate-400 hover:text-white transition-colors w-full"
         >
           {spacesExpanded ? (
             <ChevronDown className="w-3 h-3" />
@@ -101,7 +105,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
 
       {/* Chats List */}
       <div className="flex-1 overflow-y-auto px-4 py-3">
-        <p className="text-xs font-medium text-slate-500 mb-2">Recent Chats</p>
+        <p className="text-xs font-display font-medium text-slate-500 mb-2">Recent Chats</p>
         <div className="space-y-1">
           {chats.length === 0 ? (
             <p className="text-xs text-slate-500 py-2">No chats yet</p>
